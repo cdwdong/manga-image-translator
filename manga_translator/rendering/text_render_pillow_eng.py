@@ -1,3 +1,4 @@
+import re
 import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -5,27 +6,71 @@ from typing import List
 
 from .ballon_extractor import extract_ballon_region
 from ..utils import TextBlock
-from .text_render_eng import seg_eng
+from .text_render_eng import PUNSET_RIGHT_ENG, seg_eng
 
-def merge_seg_eng(text: str, font, bbox_width, size_ratio=1.2) -> List[str]:
-    """Segments text into words that fit within bbox_width"""
-    grouped = seg_eng(text)
+def merge_seg_eng(
+    text: str,
+    font,
+    bbox_width,
+    word_wrap_ratio=1.4,
+    char_wrap_ratio=2.5
+) -> List[str]:
+    """
+    주어진 너비에 맞게 텍스트를 여러 줄로 나눕니다.
+    외부 tokenizer 대신, 안정적인 '띄어쓰기'를 기준으로 단어를 분리합니다.
+    [1단계] 단어 단위로 줄을 나눈 뒤,
+    [2단계] 너무 긴 줄만 글자 단위로 잘라냅니다.
+    """
+    if bbox_width <= 0:
+        return [text]
+
+    word_max_width = bbox_width * word_wrap_ratio
+    char_max_width = bbox_width * char_wrap_ratio
+
+    # --- ✨✨✨ 핵심 수정: seg_eng() 대신 text.split() 사용 ✨✨✨ ---
+    # 이렇게 하면 '토벌'이 '토', '벌'로 쪼개지는 현상이 원천적으로 차단됩니다.
+    words = text.split(' ')
+    # 혹시 모를 여러 개의 공백으로 인해 생길 수 있는 빈 문자열 제거
+    words = [word for word in words if word]
+    # -----------------------------------------------------------------
+
+    if not words:
+        return []
+
+    # --- 1단계: 단어 단위로 줄 바꿈 수행 ---
     lines = []
-    current_line = ''
-    text_max_width = max([font.getbbox(word)[2] - font.getbbox(word)[0] for word in grouped])
-    max_width = max(bbox_width, text_max_width) * size_ratio
-    for word in grouped:
-        test_line = f"{current_line} {word}" if current_line else word
-        width = font.getbbox(test_line)[2] - font.getbbox(test_line)[0]
-        if width <= max_width:
+    current_line = words[0]
+    for i in range(1, len(words)):
+        word = words[i]
+        test_line = f"{current_line} {word}"
+        if font.getlength(test_line) <= word_max_width:
             current_line = test_line
         else:
-            if current_line:
-                lines.append(current_line)
+            lines.append(current_line)
             current_line = word
-    if current_line:
-        lines.append(current_line)
-    return lines
+    lines.append(current_line)
+    # 결과 예시: ['조룡 토벌', '후 며칠이 지나']
+
+    # --- 2단계: 너무 긴 줄만 글자 단위로 후처리 ---
+    final_lines = []
+    for line in lines:
+        # 현재 줄이 여전히 너무 길다면 (띄어쓰기 없는 긴 단어)
+        if font.getlength(line) > word_max_width:
+            sub_line = ""
+            for char in line:
+                # 글자를 자를 때는 빡빡한 기준(char_max_width)을 사용
+                if font.getlength(sub_line + char) > char_max_width:
+                    final_lines.append(sub_line)
+                    sub_line = char
+                else:
+                    sub_line += char
+            if sub_line:
+                final_lines.append(sub_line)
+        else:
+            # 일반적인 줄은 그냥 추가
+            final_lines.append(line)
+            
+    return final_lines
 
 def widen_mask_opencv_round(mask, width):
     mask_uint8 = mask.astype(np.uint8)
@@ -110,16 +155,17 @@ def render_textblock_list_eng(
     text_regions: List[TextBlock],
     font_color=(0, 0, 0),
     stroke_color=(255, 255, 255),
-    ballonarea_thresh: float = 2.0,
-    downscale_constraint: float = 0.7,
+    ballonarea_thresh: float = 2,
+    downscale_constraint: float = 0.8,
     original_img: np.ndarray = None,
-    max_font_size: int = 300,
-    bounds_padding: int = 3
+    max_font_size: int = 150,
+    bounds_padding: int = 3,
+    global_font_scale: float = 0.8
 ) -> np.ndarray:
     """Render text blocks onto image"""
 
     def calculate_font_values(font, words, delimiter=' '):
-        sw = max(font.size // 4, 1)
+        sw = max(font.size // 8, 1)
         line_height = font.getmetrics()[0] - font.getmetrics()[1]
         delimiter_len = int(font.getlength(delimiter))
         word_lengths = [int(font.getlength(w)) for w in words]
@@ -141,9 +187,9 @@ def render_textblock_list_eng(
 
     bboxes, rotated_text_layers, sws = [], [], []
     x, y = img.shape[1], img.shape[0]
-
     for region in text_regions:
-        font_size = min(region.font_size, max_font_size)
+        initial_font_size = min(region.font_size, max_font_size)
+        font_size = int(initial_font_size * global_font_scale)
         ballon_mask, xyxy = extract_ballon_region(original_img, region.xywh, enlarge_ratio=getattr(region, 'enlarge_ratio', 1))
         if isinstance(xyxy, tuple):
             xyxy = list(xyxy)
@@ -201,7 +247,7 @@ def render_textblock_list_eng(
         # Create text layer
         bbox_center_x, bbox_center_y = (xyxy[0] + xyxy[2]) / 2, (xyxy[1] + xyxy[3]) / 2
         words_text = '\n'.join(words)
-        line_spacing_px = int(font.size * 0.01)
+        line_spacing_px = int(font.size * 0.4)
         padding = (font.size + sw) * 4
 
         # Create temporary layer to measure text size

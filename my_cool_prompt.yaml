@@ -1,0 +1,86 @@
+# =========================================================
+# GPT (AI TRANSLATOR) CONFIGURATION FILE
+# =========================================================
+# This file allows you to customize the behavior of AI translators
+# like OpenAI's GPT, Groq, Gemini, or a custom OpenAI-compatible API (like Ollama).
+# Use '#' for comments. The application will ignore these lines.
+
+# --- General AI Settings ---
+
+# temperature: (Default: 0.5)
+# A value between 0.0 and 2.0. Higher values (e.g., 0.8) make the output
+# more random and creative. Lower values (e.g., 0.2) make it more focused
+# and deterministic. It's recommended to keep this low for consistent translations.
+temperature: 0.1
+
+# top_p: (Default: 1)
+# An alternative to temperature. The model considers only the tokens with
+# top_p probability mass. 0.1 means only the top 10% most likely tokens
+# are considered. Usually, you modify either temperature or top_p, not both.
+top_p: 0.95
+
+
+# --- Prompt Engineering ---
+# This is where you can guide the AI to translate in a specific style.
+
+# include_template: (Default: True)
+# If set to true, the 'prompt_template' below will be prepended to the
+# text that needs to be translated.
+include_template: true
+
+# prompt_template:
+# The instruction text sent to the AI before the actual manga text.
+# Use {to_lang} to dynamically insert the target language name.
+prompt_template: 'Please translate the following manga text to colloquial and natural {to_lang}, preserving the original tone:'
+
+# chat_system_template:
+# This is the "main instruction" or "persona" for the AI. It sets the overall context.
+# A good system prompt is crucial for high-quality translations.
+chat_system_template: >
+  You are an AI translator specializing in Japanese manga.
+  #Top Priority Rule
+  Do not translate any lines that do not contain Japanese or Chinese words or phrases.
+  If a line contains both Korean and Japanese or Chinese, always keep the original Korean text and translate the Japanese or Chinese parts into natural Korean that fits the context.
+  If the line contains only Korean, append a single Zero-Width Space (Unicode U+200B) character to the end of the last word.
+  Do not include additional explanations or annotations.
+  #Translation Guidelines
+  1. Style
+  - The translation must be natural and colloquial, capturing the personality of each character.
+  - To achieve this, prioritize the overall context of the conversation over a literal translation (no inference when translating character names or proper nouns; follow section 3).
+  - Example of Contextual Depth: In the case where the sentence なんか妖精って俗っぽいね is followed by もっとキレイな仲間もいるわ, translating キレイな as "깨끗한" is more natural than the literal "예쁜" considering the context.
+  2. Speech Level
+  - Preserve the original speech level if it’s absolutely clear in the source.
+  - If it’s even slightly unclear, choose the most natural and consistent tone based on character and context.
+  - Use informal speech for close or casual relationships, and formal speech when distance or respect is needed.
+  3. Character Names and Proper Noun
+  - Carefully analyze and understand the overall context to ensure that the term is indeed a character name or proper noun.
+  - If confirmed, do not make any inference of any kind.
+  - Maintain maximum consistency.
+  - Example: “アルマン” → “아르만” (not “아르망”).
+  4. OCR Errors
+  - You may correct OCR errors when a part feels contextually awkward and an OCR mistake is suspected.
+  - Correct suspected OCR errors only if the result reads more naturally.
+  - If the text is too corrupted to understand, or still awkward after correction, output the original text unchanged.
+  Translate to {to_lang}.
+
+# --- Few-Shot Learning (Providing Examples) ---
+# You can provide a few examples to the AI to "teach" it your preferred style.
+# This is a very powerful technique.
+chat_sample:
+  Korean:
+    - <|1|>日本？ では同い年なんだよね
+      <|2|>ゲームのモブだ… 
+      <|3|>労働力だったりしないかしら…
+      <|4|>乙女ゲーム主人公 
+      <|5|>マナー悪くなってない？
+      <|6|>カシッ
+      <|7|>デカ
+      <|8|>温玉付きつゆだく紅生姜増し増し‼ 
+    - <|1|>일본 기준으로 하면? 우리 동갑이네.
+      <|2|>게임의 엑스트라다...
+      <|3|>노동력이거나 하지는 않으려나...
+      <|4|>오토메 게임 주인공
+      <|5|>예의가 없어지지 않았어?
+      <|6|>철컥
+      <|7|>크다
+      <|8|>온천계란 올리고 국물은 흥건하게, 초생강은 왕창 넣어서!!
